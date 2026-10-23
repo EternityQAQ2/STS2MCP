@@ -1927,6 +1927,44 @@ public static partial class McpMod
         }
         state["cards"] = cards;
 
+        // Surface the current grid selection so clients can continue multi-card
+        // choices even when selecting the first card does not otherwise change
+        // the screen state. The game keeps the selected card models in a private
+        // collection on the selection screen.
+        var selectedCards = new List<Dictionary<string, object?>>();
+        if (GetInstanceFieldValue(screen, "_selectedCards") is System.Collections.IEnumerable selectedItems)
+        {
+            foreach (var selectedItem in selectedItems)
+            {
+                object? selectedModel = selectedItem;
+                if (selectedItem is NGridCardHolder selectedHolder)
+                    selectedModel = selectedHolder.CardModel;
+                else if (selectedItem != null)
+                {
+                    var cardModelProperty = selectedItem.GetType().GetProperty(
+                        "CardModel",
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.NonPublic);
+                    selectedModel = cardModelProperty?.GetValue(selectedItem) ?? selectedItem;
+                }
+
+                int selectedIndex = cardHolders.FindIndex(holder =>
+                    holder.CardModel != null && ReferenceEquals(holder.CardModel, selectedModel));
+                if (selectedIndex < 0)
+                    continue;
+
+                var selectedCard = cardHolders[selectedIndex].CardModel;
+                selectedCards.Add(new Dictionary<string, object?>
+                {
+                    ["index"] = selectedIndex,
+                    ["name"] = selectedCard == null ? "unknown" : SafeGetText(() => selectedCard.Title)
+                });
+            }
+        }
+        state["selected_cards"] = selectedCards;
+        state["selected_count"] = selectedCards.Count;
+
         // Preview container showing? (selection complete, awaiting confirm)
         // Upgrade screens use UpgradeSinglePreviewContainer / UpgradeMultiPreviewContainer
         var previewSingle = screen.GetNodeOrNull<Godot.Control>("%UpgradeSinglePreviewContainer");

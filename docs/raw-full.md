@@ -721,6 +721,10 @@ Covers deck transforms, upgrades, removals, and choose-a-card effects. Appears o
         "keywords": [ /* Keyword Objects */ ]
       }
     ],
+    "selected_cards": [
+      { "index": 0, "name": "Strike" }
+    ],                         // currently selected grid cards
+    "selected_count": 1,      // changes after each successful multi-card selection
     "preview_showing": false,    // true when selection is complete and preview is displayed
     "can_confirm": false,        // true when confirm button is available
     "can_cancel": true           // true when close/cancel button is available

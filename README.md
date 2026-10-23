@@ -137,11 +137,11 @@ $env:STS2_GAME_DIR = "D:\SteamLibrary\steamapps\common\Slay the Spire 2"
 .\build.ps1
 ```
 
-The build automatically creates a directly installable package in `out/STS2_MCP/`. It removes the .NET-generated `STS2_MCP.deps.json` and writes the STS2 manifest as `STS2_MCP.json`. Copy both files to `<game_install>/mods/`:
+The script builds `STS2_MCP.dll` into `out/STS2_MCP/`. Copy it along with the manifest JSON to `<game_install>/mods/` to install:
 
 ```
 out/STS2_MCP/STS2_MCP.dll           ->  <game_install>/mods/STS2_MCP.dll
-out/STS2_MCP/STS2_MCP.json          ->  <game_install>/mods/STS2_MCP.json
+mod_manifest.json                   ->  <game_install>/mods/STS2_MCP.json
 ```
 
 ### Build instructions for macOS
@@ -172,11 +172,11 @@ GAME_DIR="$HOME/Library/Application Support/Steam/steamapps/common/Slay the Spir
 MODS_DIR="$GAME_DIR/SlayTheSpire2.app/Contents/MacOS/mods"
 mkdir -p "$MODS_DIR"
 cp out/STS2_MCP/STS2_MCP.dll "$MODS_DIR/"
-cp out/STS2_MCP/STS2_MCP.json "$MODS_DIR/"
+cp mod_manifest.json "$MODS_DIR/STS2_MCP.json"
 ```
 
 > [!NOTE] 
-> The build copies `mod_manifest.json` to `out/STS2_MCP/STS2_MCP.json` automatically because the game's mod loader expects the manifest filename to match the mod ID.
+> `mod_manifest.json` is renamed to `STS2_MCP.json` on copy — the game's mod loader expects the manifest filename to match the mod ID.
 
 ## License
 

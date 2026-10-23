@@ -898,6 +898,19 @@ public static partial class McpMod
         if (hand == null || !hand.IsInCardSelection)
             return Error("No in-combat card selection is active");
 
+        // Upgrade selection is a single-card, two-step flow: select a card, then
+        // press confirm. If an agent repeats combat_select_card after the first
+        // selection, finish the pending upgrade instead of changing cards forever.
+        if (hand.CurrentMode == NPlayerHand.Mode.UpgradeSelect)
+        {
+            var selectedContainer = hand.GetNodeOrNull<Godot.Control>("%SelectedHandCardContainer");
+            var confirmBtn = hand.GetNodeOrNull<NConfirmButton>("%SelectModeConfirmButton");
+            bool hasSelectedCard = selectedContainer != null
+                && FindAll<NSelectedHandCardHolder>(selectedContainer).Any(h => h.CardModel != null);
+            if (hasSelectedCard && confirmBtn?.IsEnabled == true)
+                return ExecuteCombatConfirmSelection();
+        }
+
         if (!data.TryGetValue("card_index", out var indexElem))
             return Error("Missing 'card_index' (index of the card in hand)");
 

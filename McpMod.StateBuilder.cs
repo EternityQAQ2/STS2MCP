@@ -2211,7 +2211,29 @@ public static partial class McpMod
 
         // Confirm button state
         var confirmBtn = hand.GetNodeOrNull<NConfirmButton>("%SelectModeConfirmButton");
-        state["can_confirm"] = confirmBtn?.IsEnabled ?? false;
+        bool canConfirm = confirmBtn?.IsEnabled ?? false;
+        state["can_confirm"] = canConfirm;
+
+        var availableActions = new List<Dictionary<string, object?>>();
+        bool upgradeReadyToConfirm = hand.CurrentMode == NPlayerHand.Mode.UpgradeSelect && canConfirm;
+        if (!upgradeReadyToConfirm)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "combat_select_card",
+                ["parameter"] = "card_index",
+                ["description"] = "Select a card from the selectable hand cards."
+            });
+        }
+        if (canConfirm)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "combat_confirm_selection",
+                ["description"] = "Confirm the currently selected card(s) and finish this selection step."
+            });
+        }
+        state["available_actions"] = availableActions;
 
         return state;
     }

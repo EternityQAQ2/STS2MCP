@@ -810,7 +810,10 @@ public static partial class McpMod
         }
 
         bool canConfirm = handSelect.TryGetValue("can_confirm", out var cc) && cc is true;
-        sb.AppendLine($"Use `combat_select_card(card_index)` to select. Can confirm: {(canConfirm ? "Yes - use `combat_confirm_selection`" : "No - select more cards")}");
+        if (mode == "upgrade_select" && canConfirm)
+            sb.AppendLine("**A card is already selected. The next action should be `combat_confirm_selection()`; do not select another card.**");
+        else
+            sb.AppendLine($"Use `combat_select_card(card_index)` to select. Can confirm: {(canConfirm ? "Yes - use `combat_confirm_selection`" : "No - select more cards")}");
         sb.AppendLine();
     }
 

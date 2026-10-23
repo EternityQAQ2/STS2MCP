@@ -1153,6 +1153,8 @@ Select a card during in-combat hand selection (exhaust, discard, upgrade prompts
 |---|---|---|---|
 | `card_index` | int | Yes | Index in the selectable hand cards |
 
+During a single-card combat upgrade selection, repeating `combat_select_card` after a card is selected confirms the pending upgrade as a compatibility fallback. Multi-card selection modes continue to select or deselect cards normally.
+
 ### `combat_confirm_selection`
 
 Confirm the in-combat hand card selection.

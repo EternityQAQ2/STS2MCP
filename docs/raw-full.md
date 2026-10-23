@@ -1313,6 +1313,7 @@ Cancel or close the card selection overlay.
 ### `select_bundle`
 
 Open a bundle preview in the bundle selection screen.
+If a bundle preview is already open, repeating `select_bundle` confirms the preview as a compatibility fallback for clients that retry the same selection action.
 
 ```json
 { "action": "select_bundle", "index": 0 }

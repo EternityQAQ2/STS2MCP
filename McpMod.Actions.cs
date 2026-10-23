@@ -836,7 +836,13 @@ public static partial class McpMod
         int index = indexElem.GetInt32();
         var previewContainer = screen.GetNodeOrNull<Godot.Control>("%BundlePreviewContainer");
         if (previewContainer?.Visible == true)
-            return Error("A bundle preview is already open - confirm or cancel it first");
+        {
+            // Compatibility fallback for agents that repeat select_bundle after the
+            // first call opens the preview. At this point the bundle has already
+            // been chosen, so complete the pending preview instead of failing and
+            // leaving the agent in a retry loop.
+            return ExecuteConfirmBundleSelection();
+        }
 
         var bundles = FindAll<NCardBundle>(screen);
         if (index < 0 || index >= bundles.Count)

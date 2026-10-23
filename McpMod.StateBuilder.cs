@@ -2117,24 +2117,33 @@ public static partial class McpMod
         var confirmButton = screen.GetNodeOrNull<NConfirmButton>("%Confirm");
         state["can_cancel"] = cancelButton?.IsEnabled == true;
         state["can_confirm"] = confirmButton?.IsEnabled == true;
-        var chooseActions = new List<Dictionary<string, object?>>
+        var availableActions = new List<Dictionary<string, object?>>();
+        if (!previewShowing)
         {
-            new()
+            availableActions.Add(new Dictionary<string, object?>
             {
-                ["action"] = "select_card",
+                ["action"] = "select_bundle",
                 ["parameter"] = "index",
-                ["description"] = "Choose a card from the cards list."
-            }
-        };
-        if (cancelButton?.IsEnabled == true)
-        {
-            chooseActions.Add(new Dictionary<string, object?>
-            {
-                ["action"] = "cancel_selection",
-                ["description"] = "Skip or cancel this card choice."
+                ["description"] = "Open a bundle preview from the bundles list."
             });
         }
-        state["available_actions"] = chooseActions;
+        if (previewShowing && confirmButton?.IsEnabled == true)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "confirm_bundle_selection",
+                ["description"] = "Confirm the previewed bundle and finish this selection step."
+            });
+        }
+        if (previewShowing && cancelButton?.IsEnabled == true)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "cancel_bundle_selection",
+                ["description"] = "Close the bundle preview and return to the bundle list."
+            });
+        }
+        state["available_actions"] = availableActions;
 
         return state;
     }

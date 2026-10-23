@@ -27,4 +27,12 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <!-- Produce a folder that can be copied directly into the game's mods directory. -->
+  <Target Name="PrepareModPackage" AfterTargets="Build">
+    <Delete Files="$(TargetDir)$(AssemblyName).deps.json" />
+    <Copy
+      SourceFiles="$(MSBuildProjectDirectory)/mod_manifest.json"
+      DestinationFiles="$(TargetDir)$(AssemblyName).json" />
+  </Target>
 </Project>

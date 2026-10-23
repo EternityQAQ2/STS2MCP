@@ -545,14 +545,6 @@ public static partial class McpMod
             }
             else
             {
-                // Auto-open the shopkeeper's inventory if not already open.
-                // NMerchantRoom.Inventory (UI node) can be null before the scene is fully ready;
-                // OpenInventory() itself accesses Inventory.IsOpen, so guard against null.
-                var merchUI = NMerchantRoom.Instance;
-                if (merchUI?.Inventory != null && !merchUI.Inventory.IsOpen)
-                {
-                    merchUI.OpenInventory();
-                }
                 result["state_type"] = "shop";
                 result["shop"] = BuildShopState(merchantRoom, runState);
             }
@@ -770,6 +762,10 @@ public static partial class McpMod
 
     private static Dictionary<string, object?> BuildStartRunLobbyState(StartRunLobby lobby)
     {
+        var maxPlayers = GetInstanceFieldValue(lobby, "_maxPlayers") is int configuredMaxPlayers
+            ? configuredMaxPlayers
+            : lobby.Players.Count;
+
         var lobbyState = new Dictionary<string, object?>
         {
             ["type"] = lobby.NetService.Type switch
@@ -780,7 +776,7 @@ public static partial class McpMod
                 _ => lobby.NetService.Type.ToString().ToLowerInvariant()
             },
             ["game_mode"] = lobby.GameMode.ToString().ToLowerInvariant(),
-            ["max_players"] = lobby.MaxPlayers,
+            ["max_players"] = maxPlayers,
             ["ascension"] = lobby.Ascension,
             ["max_ascension"] = lobby.MaxAscension,
             ["all_ready"] = lobby.Players.Count > 0 && lobby.Players.All(p => p.isReady),
@@ -969,22 +965,15 @@ public static partial class McpMod
             }
             catch { }
 
-            info["expected_player_count"] = lobby.Run?.Players?.Count ?? 0;
-            info["connected_player_count"] = lobby.ConnectedPlayerIds?.Count ?? 0;
+            HashSet<ulong> connectedPlayerIds;
+            try { connectedPlayerIds = lobby.PlayerIds.ToHashSet(); }
+            catch { connectedPlayerIds = new HashSet<ulong>(); }
 
-            // LoadRunLobby no longer exposes IsAboutToBeginGame in the public game API,
-            // so derive the same readiness summary from connected players and ready flags.
-            // Without these fields, FormatLobbyMarkdown printed "All ready: false" unconditionally for load lobbies.
+            info["expected_player_count"] = lobby.Run?.Players?.Count ?? 0;
+            info["connected_player_count"] = connectedPlayerIds.Count;
+
             bool aboutToBegin = false;
-            try
-            {
-                var runPlayers = lobby.Run?.Players;
-                var connectedPlayerIds = lobby.ConnectedPlayerIds;
-                aboutToBegin = runPlayers != null
-                    && connectedPlayerIds != null
-                    && runPlayers.Count > 0
-                    && runPlayers.All(player => connectedPlayerIds.Contains(player.NetId) && lobby.IsPlayerReady(player.NetId));
-            }
+            try { aboutToBegin = lobby.IsAboutToBeginGame(); }
             catch { }
             info["all_ready"] = aboutToBegin;
             info["is_about_to_begin"] = aboutToBegin;
@@ -997,7 +986,7 @@ public static partial class McpMod
                 {
                     foreach (var sp in lobby.Run.Players)
                     {
-                        bool isConnected = lobby.ConnectedPlayerIds?.Contains(sp.NetId) ?? false;
+                        bool isConnected = connectedPlayerIds.Contains(sp.NetId);
                         bool isReady = false;
                         try { isReady = lobby.IsPlayerReady(sp.NetId); } catch { }
                         players.Add(new Dictionary<string, object?>
@@ -1462,22 +1451,11 @@ public static partial class McpMod
             return state;
         }
 
-        // Auto-open the inventory if the merchant button is still available
-        if (fakeMerchantNode != null)
-        {
-            var inventoryUI = FindFirst<NMerchantInventory>(fakeMerchantNode);
-            if (inventoryUI != null && !inventoryUI.IsOpen)
-            {
-                // ForceClick the merchant button to go through the proper signal chain
-                // (disables proceed button, wires InventoryClosed callback, etc.)
-                var merchantButton = fakeMerchantNode.MerchantButton;
-                if (merchantButton != null && merchantButton.Visible && merchantButton.IsEnabled)
-                    merchantButton.ForceClick();
-            }
-        }
-
         // Build shop inventory from the FakeMerchant model
         var shopState = BuildFakeMerchantShopItems(fakeMerchant.Inventory);
+        bool isOpen = fakeMerchantNode != null
+            && FindFirst<NMerchantInventory>(fakeMerchantNode)?.IsOpen == true;
+        shopState["is_open"] = isOpen;
 
         // Proceed button
         if (fakeMerchantNode != null)
@@ -1489,6 +1467,7 @@ public static partial class McpMod
         {
             shopState["can_proceed"] = false;
         }
+        shopState["available_actions"] = BuildShopAvailableActions(isOpen);
 
         state["shop"] = shopState;
         return state;
@@ -1563,6 +1542,9 @@ public static partial class McpMod
     private static Dictionary<string, object?> BuildShopState(MerchantRoom merchantRoom, RunState runState)
     {
         var state = new Dictionary<string, object?>();
+        bool isOpen = NMerchantRoom.Instance?.Inventory?.IsOpen ?? false;
+        state["is_open"] = isOpen;
+        state["available_actions"] = BuildShopAvailableActions(isOpen);
 
         var inventory = merchantRoom.GetLocalInventory();
         if (inventory == null)
@@ -1668,6 +1650,26 @@ public static partial class McpMod
         state["can_proceed"] = proceedButton?.IsEnabled ?? false;
 
         return state;
+    }
+
+    private static List<Dictionary<string, object?>> BuildShopAvailableActions(bool isOpen)
+    {
+        return new List<Dictionary<string, object?>>
+        {
+            new()
+            {
+                ["action"] = "shop_purchase",
+                ["parameter"] = "index",
+                ["description"] = "Purchase an item from the shop items list."
+            },
+            new()
+            {
+                ["action"] = "proceed",
+                ["description"] = isOpen
+                    ? "Close the shop inventory. Call proceed again after it closes to leave the room."
+                    : "Leave the shop room and return to the map."
+            }
+        };
     }
 
     private static Dictionary<string, object?> BuildMapState(RunState runState)
@@ -1991,6 +1993,39 @@ public static partial class McpMod
         }
         state["can_confirm"] = canConfirm;
 
+        // Expose non-card controls explicitly so API clients do not mistake
+        // the selected card for the only available next action.
+        var availableActions = new List<Dictionary<string, object?>>
+        {
+            new()
+            {
+                ["action"] = "select_card",
+                ["parameter"] = "index",
+                ["description"] = previewShowing
+                    ? "Compatibility fallback: selecting again confirms the open preview. Prefer confirm_selection."
+                    : "Select a card from the cards list."
+            }
+        };
+        if (canConfirm)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "confirm_selection",
+                ["description"] = "Confirm the selected card(s) and leave this selection step."
+            });
+        }
+        if (canCancel)
+        {
+            availableActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "cancel_selection",
+                ["description"] = previewShowing
+                    ? "Return to the card grid without confirming."
+                    : "Close or cancel the card selection screen."
+            });
+        }
+        state["available_actions"] = availableActions;
+
         return state;
     }
 
@@ -2082,6 +2117,24 @@ public static partial class McpMod
         var confirmButton = screen.GetNodeOrNull<NConfirmButton>("%Confirm");
         state["can_cancel"] = cancelButton?.IsEnabled == true;
         state["can_confirm"] = confirmButton?.IsEnabled == true;
+        var chooseActions = new List<Dictionary<string, object?>>
+        {
+            new()
+            {
+                ["action"] = "select_card",
+                ["parameter"] = "index",
+                ["description"] = "Choose a card from the cards list."
+            }
+        };
+        if (cancelButton?.IsEnabled == true)
+        {
+            chooseActions.Add(new Dictionary<string, object?>
+            {
+                ["action"] = "cancel_selection",
+                ["description"] = "Skip or cancel this card choice."
+            });
+        }
+        state["available_actions"] = chooseActions;
 
         return state;
     }

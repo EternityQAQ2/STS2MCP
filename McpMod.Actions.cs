@@ -563,9 +563,13 @@ public static partial class McpMod
         {
             if (merchRoom.Inventory?.IsOpen == true)
             {
-                var backBtn = FindFirst<NBackButton>(merchRoom);
-                if (backBtn is { IsEnabled: true })
-                    backBtn.ForceClick();
+                if (!TryCloseMerchantInventory(merchRoom.Inventory))
+                    return Error("Shop inventory is open but could not be closed");
+                return new Dictionary<string, object?>
+                {
+                    ["status"] = "ok",
+                    ["message"] = "Closing shop inventory; call proceed again to leave the shop room"
+                };
             }
             if (merchRoom.ProceedButton.IsEnabled)
             {
@@ -583,9 +587,13 @@ public static partial class McpMod
                 var fmInventory = FindFirst<NMerchantInventory>(fmNode);
                 if (fmInventory is { IsOpen: true })
                 {
-                    var backBtn = FindFirst<NBackButton>(fmNode);
-                    if (backBtn is { IsEnabled: true })
-                        backBtn.ForceClick();
+                    if (!TryCloseMerchantInventory(fmInventory))
+                        return Error("Fake merchant inventory is open but could not be closed");
+                    return new Dictionary<string, object?>
+                    {
+                        ["status"] = "ok",
+                        ["message"] = "Closing fake merchant inventory; call proceed again to leave the event"
+                    };
                 }
                 var proceedBtn = FindFirst<NProceedButton>(fmNode);
                 if (proceedBtn is { IsEnabled: true })
@@ -608,6 +616,27 @@ public static partial class McpMod
         return Error("No proceed button available or enabled");
     }
 
+    private static bool TryCloseMerchantInventory(NMerchantInventory inventory)
+    {
+        try
+        {
+            var closeMethod = inventory.GetType().GetMethod(
+                "Close",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic);
+            if (closeMethod == null)
+                return false;
+
+            closeMethod.Invoke(inventory, null);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static Dictionary<string, object?> ExecuteSelectCard(Dictionary<string, JsonElement> data)
     {
         var overlay = NOverlayStack.Instance?.Peek();
@@ -619,6 +648,24 @@ public static partial class McpMod
 
         if (overlay is NCardGridSelectionScreen gridScreen)
         {
+            // Once a card has opened the preview, the grid is no longer the active
+            // interaction surface. Some clients repeat select_card(index) because
+            // older state responses only exposed card indices. Treat that repeated
+            // selection as confirmation instead of emitting a no-op grid signal.
+            foreach (var containerName in new[] { "%UpgradeSinglePreviewContainer", "%UpgradeMultiPreviewContainer", "%PreviewContainer" })
+            {
+                if (gridScreen.GetNodeOrNull<Godot.Control>(containerName)?.Visible == true)
+                {
+                    var confirmResult = ExecuteConfirmSelection();
+                    if (confirmResult.TryGetValue("status", out var status) && status?.ToString() == "ok")
+                    {
+                        confirmResult["message"] =
+                            "Card selection preview was already open; confirming the selected card instead of selecting it again";
+                    }
+                    return confirmResult;
+                }
+            }
+
             var grid = FindFirst<NCardGrid>(gridScreen);
             if (grid == null)
                 return Error("Card grid not found in selection screen");
